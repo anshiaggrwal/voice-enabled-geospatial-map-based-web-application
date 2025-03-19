@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice-Enabled Mapping App</title>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+    <!-- Annyang for Voice Commands -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/annyang/2.6.1/annyang.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #map {
+            height: 85vh;
+            width: 100vw;
+            margin-top: 50px;
+        }
+        #status {
+            padding: 10px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            font-size: 1.2em;
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 999;
+        }
+        #debugInfo {
+            padding: 5px;
+            background-color: #f8f9fa;
+            color: #333;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 0.9em;
+            position: fixed;
+            bottom: 50px;
+            width: 100%;
+            z-index: 998;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        .command-buttons {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+        .command-button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .command-list {
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 900;
+        }
+        .command-list h3 {
+            margin-top: 0;
+        }
+        .command-list ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="status">Waiting for microphone access...</h1>
+    <div id="map"></div>
+    <div id="debugInfo">Debug information will appear here</div>
+    
+    <div class="command-list">
+        <h3>Voice Commands:</h3>
+        <ul>
+            <li>"zoom in"</li>
+            <li>"zoom out"</li>
+            <li>"where am I"</li>
+            <li>"update location"</li>
+            <li>"show path from my location to [coords]"</li>
+            <li>"test command"</li>
+        </ul>
+    </div>
+    
+    <div class="command-buttons">
+        <button class="command-button" onclick="zoomIn()">Zoom In</button>
+        <button class="command-button" onclick="zoomOut()">Zoom Out</button>
+        <button class="command-button" onclick="testRouting()">Test Route</button>
+        <button class="command-button" onclick="testCommand()">Test Voice</button>
+    </div>
+
+    <script>
+        const statusElement = document.getElementById('status');
+        const debugElement = document.getElementById('debugInfo');
+        const map = L.map('map').setView([20.5937, 78.9629], 5);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        let routeControl = null;
+        let userLocation = null;
+        let userMarker = null;
+        
+        function log(message) {
+            console.log(message);
+            debugElement.innerHTML = message + "<br>" + debugElement.innerHTML;
+            if (debugElement.innerHTML.split("<br>").length > 10) {
+                debugElement.innerHTML = debugElement.innerHTML.split("<br>").slice(0, 10).join("<br>");
+            }
+        }
+        
+        // Get current location with better error handling
+        function updateUserLocation() {
+            if (navigator.geolocation) {
+                statusElement.textContent = "Getting your location...";
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = [position.coords.latitude, position.coords.longitude];
+                        statusElement.textContent = `Location found: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
+                        log(`Location updated: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`);
+                        
+                        if (userMarker) {
+                            map.removeLayer(userMarker);
+                        }
+                        
+                        userMarker = L.marker(userLocation).addTo(map)
+                            .bindPopup('You are here')
+                            .openPopup();
+                            
+                        map.setView(userLocation, 12);
+                    },
+                    (error) => {
+                        console.error("Geolocation error:", error);
+                        let errorMsg = "Unable to fetch location. ";
+                        
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMsg += "Location permission denied.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMsg += "Location information unavailable.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMsg += "Location request timed out.";
+                                break;
+                            default:
+                                errorMsg += "Unknown error occurred.";
+                        }
+                        
+                        statusElement.textContent = errorMsg;
+                        log(errorMsg);
+                        alert(errorMsg);
+                    },
+                    { 
+                        enableHighAccuracy: true, 
+                        timeout: 10000, 
+                        maximumAge: 0 
+                    }
+                );
+            } else {
+                const errorMsg = "Geolocation not supported in your browser";
+                statusElement.textContent = errorMsg;
+                log(errorMsg);
+                alert(errorMsg);
+            }
+        }
+        
+        // Initial location fetch
+        updateUserLocation();
+        
+        function zoomIn() {
+            map.zoomIn();
+            statusElement.textContent = "Zooming in...";
+            log("Zoom in command executed");
+            setTimeout(() => statusElement.textContent = "Ready for commands", 1000);
+        }
+        
+        function zoomOut() {
+            map.zoomOut();
+            statusElement.textContent = "Zooming out...";
+            log("Zoom out command executed");
+            setTimeout(() => statusElement.textContent = "Ready for commands", 1000);
+        }
+        
+        function testCommand() {
+            statusElement.textContent = "Test command executed!";
+            log("Test command executed successfully");
+            alert("Voice system is working!");
+            setTimeout(() => statusElement.textContent = "Ready for commands", 2000);
+        }
+        
+        function parseLocation(locationStr) {
+            // Check if it's "my location"
+            if (locationStr && locationStr.toLowerCase() === 'my location') {
+                if (!userLocation) {
+                    throw new Error("Your current location is not available");
+                }
+                return userLocation;
+            }
+            
+            // Try to parse as coordinates
+            try {
+                const coords = locationStr.split(',').map(coord => parseFloat(coord.trim()));
+                if (coords.length !== 2 || isNaN(coords[0]) || isNaN(coords[1])) {
+                    throw new Error("Invalid coordinates format");
+                }
+                return coords;
+            } catch (e) {
+                throw new Error(`Couldn't parse location: ${locationStr}`);
+            }
+        }
+        
+        function showPath(source, destination) {
+            statusElement.textContent = `Finding route from ${source} to ${destination}...`;
+            log(`Routing from ${source} to ${destination}`);
+            
+            try {
+                const srcCoords = parseLocation(source);
+                const destCoords = parseLocation(destination);
+                
+                log(`Source parsed as: ${srcCoords}, Destination parsed as: ${destCoords}`);
+                
+                if (routeControl) {
+                    map.removeControl(routeControl);
+                }
+                
+                routeControl = L.Routing.control({
+                    waypoints: [
+                        L.latLng(srcCoords[0], srcCoords[1]), 
+                        L.latLng(destCoords[0], destCoords[1])
+                    ],
+                    routeWhileDragging: true,
+                    lineOptions: {
+                        styles: [{ color: '#6CB1EE', weight: 5 }]
+                    }
+                }).addTo(map);
+                
+                statusElement.textContent = "Route calculated!";
+            } catch (error) {
+                statusElement.textContent = error.message;
+                log(`Routing error: ${error.message}`);
+                alert(error.message);
+            }
+        }
+        
+        // Test function for routing
+        function testRouting() {
+            if (!userLocation) {
+                alert("Your location is not available yet. Please wait.");
+                return;
+            }
+            
+            // Route to a default destination (Mumbai as an example)
+            const mumbai = [19.0760, 72.8777];
+            showPath("my location", mumbai.join(","));
+        }
+        
+        // Voice command setup
+        if (annyang) {
+            // Define commands with multiple variations for better recognition
+            const commands = {
+                // Fixed: Added variations for problematic commands
+                'zoom in': zoomIn,
+                'zooming': zoomIn,
+                'make bigger': zoomIn,
+                
+                'zoom out': zoomOut,
+                'zooming out': zoomOut,
+                'make smaller': zoomOut,
+                
+                'where am I': function() {
+                    log("RECOGNIZED: 'where am I'");
+                    if (userLocation) {
+                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
+                        map.setView(userLocation, 15);
+                    } else {
+                        statusElement.textContent = "Your location is not available";
+                    }
+                },
+                'where I am': function() { // Added variation
+                    log("RECOGNIZED: 'where I am'");
+                    if (userLocation) {
+                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
+                        map.setView(userLocation, 15);
+                    } else {
+                        statusElement.textContent = "Your location is not available";
+                    }
+                },
+                'show my location': function() { // Added alternative phrase
+                    log("RECOGNIZED: 'show my location'");
+                    if (userLocation) {
+                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
+                        map.setView(userLocation, 15);
+                    } else {
+                        statusElement.textContent = "Your location is not available";
+                    }
+                },
+                
+                'update location': updateUserLocation,
+                'refresh location': updateUserLocation,  // Added variation
+                'get my location': updateUserLocation,   // Added variation
+                'find me': updateUserLocation,           // Added simple alternative
+                
+                'test command': testCommand,
+                'test': testCommand, // Shorter variation
+                
+                'show path from *source to *destination': function(source, destination) {
+                    log(`RECOGNIZED: 'show path from ${source} to ${destination}'`);
+                    statusElement.textContent = `Command recognized: show path from ${source} to ${destination}`;
+                    showPath(source, destination);
+                },
+                'route from *source to *destination': function(source, destination) { // Added variation
+                    log(`RECOGNIZED: 'route from ${source} to ${destination}'`);
+                    statusElement.textContent = `Command recognized: route from ${source} to ${destination}`;
+                    showPath(source, destination);
+                }
+            };
+            
+            // Add debug command to show all commands
+            commands['show commands'] = function() {
+                log("RECOGNIZED: 'show commands'");
+                alert("Available commands: 'zoom in', 'zoom out', 'where am I', 'update location', 'test command', 'show path from X to Y'");
+            };
+            
+            // Add commands to annyang
+            annyang.addCommands(commands);
+            
+            // Add callbacks to get feedback on voice recognition
+            annyang.addCallback('start', function() {
+                statusElement.textContent = "Voice recognition started...";
+                log("Annyang started");
+            });
+            
+            annyang.addCallback('soundstart', function() {
+                statusElement.textContent = "Listening...";
+                log("Sound detected");
+            });
+            
+            annyang.addCallback('result', function(phrases) {
+                statusElement.textContent = "Heard phrases: " + phrases[0];
+                log("Heard phrases: " + JSON.stringify(phrases));
+            });
+            
+            annyang.addCallback('resultMatch', function(phrase, matched, matches) {
+                log(`Matched "${phrase}" to command "${matched}"`);
+            });
+            
+            annyang.addCallback('resultNoMatch', function(phrases) {
+                log("No match found for: " + JSON.stringify(phrases));
+                statusElement.textContent = "Sorry, I didn't understand that command";
+            });
+            
+            annyang.addCallback('error', function(error) {
+                console.error("Annyang error:", error);
+                log("Error: " + JSON.stringify(error));
+                statusElement.textContent = "Voice recognition error";
+            });
+            
+            // Set debug mode to true for detailed console logs
+            annyang.debug(true);
+            
+            // Improve recognition settings
+            annyang.setLanguage('en-US'); // Explicitly set language
+            
+            // Start listening with more permissive options
+            try {
+                annyang.start({ 
+                    autoRestart: true, 
+                    continuous: true,
+                    paused: false
+                });
+                log("Annyang initialized and started");
+                statusElement.textContent = "Ready for commands";
+            } catch (e) {
+                log("Error starting Annyang: " + e.message);
+                alert("Error starting voice recognition system: " + e.message);
+            }
+            
+        } else {
+            statusElement.textContent = "Voice recognition not supported in your browser";
+            log("Annyang not available");
+            alert('Voice recognition not supported in your browser.');
+        }
+    </script>
+</body>
+</html>
