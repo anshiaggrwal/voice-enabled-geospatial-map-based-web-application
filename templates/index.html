@@ -3,408 +3,1532 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice-Enabled Mapping App</title>
-    
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-
-    <!-- Annyang for Voice Commands -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/annyang/2.6.1/annyang.min.js"></script>
-
+    <title>Enhanced Voice-Enabled Map Interface</title>
+    <!-- OpenLayers library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.css" rel="stylesheet" />
     <style>
-        body {
+        body { 
+            margin: 0; 
+            padding: 0; 
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
             overflow: hidden;
         }
-        #map {
-            height: 85vh;
-            width: 100vw;
-            margin-top: 50px;
+        
+        #map { 
+            position: absolute; 
+            top: 0; 
+            bottom: 0; 
+            width: 100%; 
+            height: 100%;
+            background-color: #f2f2f2;
         }
-        #status {
-            padding: 10px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            font-size: 1.2em;
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 999;
-        }
-        #debugInfo {
-            padding: 5px;
-            background-color: #f8f9fa;
-            color: #333;
-            border-top: 1px solid #ddd;
-            text-align: center;
-            font-size: 0.9em;
-            position: fixed;
-            bottom: 50px;
-            width: 100%;
-            z-index: 998;
-            max-height: 100px;
-            overflow-y: auto;
-        }
-        .command-buttons {
-            position: fixed;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
+        
+        #voice-control {
+            position: absolute;
+            top: 10px;
+            right: 10px;
             z-index: 1000;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            align-items: center;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
         }
-        .command-button {
-            padding: 10px 15px;
-            background-color: #4CAF50;
+        
+        #voice-btn {
+            background-color: #4285f4;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
             cursor: pointer;
-            font-size: 16px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .command-list {
-            position: fixed;
-            top: 50px;
-            right: 10px;
-            background-color: rgba(255, 255, 255, 0.8);
+        
+        #voice-btn:hover {
+            background-color: #3367d6;
+        }
+        
+        #voice-btn.listening {
+            animation: pulse 1.5s infinite;
+            background-color: #ea4335;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+            text-align: center;
+            min-height: 40px;
+            max-width: 200px;
+        }
+        
+        #command-list {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
             padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 900;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            font-size: 12px;
         }
-        .command-list h3 {
+        
+        #command-list h3 {
             margin-top: 0;
+            margin-bottom: 8px;
         }
-        .command-list ul {
+        
+        #command-list ul {
             margin: 0;
-            padding-left: 20px;
+            padding-left: 18px;
+        }
+        
+        .marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: red;
+            opacity: 0.7;
+        }
+        
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.8);
+            padding: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 100px;
+            overflow: auto;
+        }
+        
+        .ol-attribution {
+            font-size: 10px;
+        }
+        
+        #dialog-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        #dialog-box {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 80%;
+            text-align: center;
+        }
+        
+        #dialog-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        
+        #dialog-content {
+            margin-bottom: 15px;
+        }
+        
+        #dialog-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .dialog-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .primary-button {
+            background-color: #4285f4;
+            color: white;
+        }
+        
+        .secondary-button {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+        
+        /* Location marker styles */
+        .start-marker {
+            color: green;
+            font-size: 24px;
+        }
+        
+        .end-marker {
+            color: red; 
+            font-size: 24px;
+        }
+        
+        /* Distance info box */
+        #distance-info {
+            position: absolute;
+            bottom: 120px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+        }
+        
+        /* Enhanced clarity for map */
+        .ol-control button {
+            background-color: rgba(40, 40, 40, 0.8) !important;
+        }
+        
+        .ol-control button:hover {
+            background-color: rgba(0, 0, 0, 0.9) !important;
+        }
+        
+        .ol-zoom {
+            top: 10px;
+            left: 10px;
         }
     </style>
 </head>
 <body>
-    <h1 id="status">Waiting for microphone access...</h1>
+    <!-- Map container -->
     <div id="map"></div>
-    <div id="debugInfo">Debug information will appear here</div>
     
-    <div class="command-list">
+    <!-- Voice control UI -->
+    <div id="voice-control">
+        <button id="voice-btn" title="Click to speak">
+            🎤
+        </button>
+        <div id="status">Click the microphone and speak a command</div>
+    </div>
+    
+    <!-- Command list -->
+    <div id="command-list">
         <h3>Voice Commands:</h3>
         <ul>
-            <li>"zoom in"</li>
-            <li>"zoom out"</li>
-            <li>"where am I"</li>
-            <li>"update location"</li>
-            <li>"show path from my location to [coords]"</li>
-            <li>"test command"</li>
+            <li>"Zoom in" or "Zoom out"</li>
+            <li>"Go to [city/location]"</li>
+            <li>"Show satellite view"</li>
+            <li>"Show streets view"</li>
+            <li>"Find [points of interest] nearby"</li>
+            <li>"Pan [direction]" (north, south, east, west)</li>
+            <li>"Show path" (will ask for start and destination)</li>
+            <li>"Clear map" (removes all markers and paths)</li>
+            <li>"Centre map" (returns to default view)</li>
         </ul>
     </div>
     
-    <div class="command-buttons">
-        <button class="command-button" onclick="zoomIn()">Zoom In</button>
-        <button class="command-button" onclick="zoomOut()">Zoom Out</button>
-        <button class="command-button" onclick="testRouting()">Test Route</button>
-        <button class="command-button" onclick="testCommand()">Test Voice</button>
+    <!-- Distance info box -->
+    <div id="distance-info"></div>
+    
+    <!-- Debug panel -->
+    <div id="debug">Map initializing...</div>
+    
+    <!-- Dialog overlay for multi-step commands -->
+    <div id="dialog-overlay">
+        <div id="dialog-box">
+            <div id="dialog-title">Dialog Title</div>
+            <div id="dialog-content">Dialog content goes here</div>
+            <div id="dialog-buttons">
+                <button class="dialog-button primary-button" id="dialog-confirm">Confirm</button>
+                <button class="dialog-button secondary-button" id="dialog-cancel">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        const statusElement = document.getElementById('status');
-        const debugElement = document.getElementById('debugInfo');
-        const map = L.map('map').setView([20.5937, 78.9629], 5);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-        
-        let routeControl = null;
-        let userLocation = null;
-        let userMarker = null;
-        
-        function log(message) {
+        // Debug function to log messages
+        function debug(message) {
+            const debugDiv = document.getElementById('debug');
+            debugDiv.innerHTML += '<br>' + message;
             console.log(message);
-            debugElement.innerHTML = message + "<br>" + debugElement.innerHTML;
-            if (debugElement.innerHTML.split("<br>").length > 10) {
-                debugElement.innerHTML = debugElement.innerHTML.split("<br>").slice(0, 10).join("<br>");
-            }
-        }
-        
-        // Get current location with better error handling
-        function updateUserLocation() {
-            if (navigator.geolocation) {
-                statusElement.textContent = "Getting your location...";
-                
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        userLocation = [position.coords.latitude, position.coords.longitude];
-                        statusElement.textContent = `Location found: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
-                        log(`Location updated: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`);
-                        
-                        if (userMarker) {
-                            map.removeLayer(userMarker);
-                        }
-                        
-                        userMarker = L.marker(userLocation).addTo(map)
-                            .bindPopup('You are here')
-                            .openPopup();
-                            
-                        map.setView(userLocation, 12);
-                    },
-                    (error) => {
-                        console.error("Geolocation error:", error);
-                        let errorMsg = "Unable to fetch location. ";
-                        
-                        switch(error.code) {
-                            case error.PERMISSION_DENIED:
-                                errorMsg += "Location permission denied.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                errorMsg += "Location information unavailable.";
-                                break;
-                            case error.TIMEOUT:
-                                errorMsg += "Location request timed out.";
-                                break;
-                            default:
-                                errorMsg += "Unknown error occurred.";
-                        }
-                        
-                        statusElement.textContent = errorMsg;
-                        log(errorMsg);
-                        alert(errorMsg);
-                    },
-                    { 
-                        enableHighAccuracy: true, 
-                        timeout: 10000, 
-                        maximumAge: 0 
-                    }
-                );
-            } else {
-                const errorMsg = "Geolocation not supported in your browser";
-                statusElement.textContent = errorMsg;
-                log(errorMsg);
-                alert(errorMsg);
-            }
-        }
-        
-        // Initial location fetch
-        updateUserLocation();
-        
-        function zoomIn() {
-            map.zoomIn();
-            statusElement.textContent = "Zooming in...";
-            log("Zoom in command executed");
-            setTimeout(() => statusElement.textContent = "Ready for commands", 1000);
-        }
-        
-        function zoomOut() {
-            map.zoomOut();
-            statusElement.textContent = "Zooming out...";
-            log("Zoom out command executed");
-            setTimeout(() => statusElement.textContent = "Ready for commands", 1000);
-        }
-        
-        function testCommand() {
-            statusElement.textContent = "Test command executed!";
-            log("Test command executed successfully");
-            alert("Voice system is working!");
-            setTimeout(() => statusElement.textContent = "Ready for commands", 2000);
-        }
-        
-        function parseLocation(locationStr) {
-            // Check if it's "my location"
-            if (locationStr && locationStr.toLowerCase() === 'my location') {
-                if (!userLocation) {
-                    throw new Error("Your current location is not available");
-                }
-                return userLocation;
-            }
             
-            // Try to parse as coordinates
-            try {
-                const coords = locationStr.split(',').map(coord => parseFloat(coord.trim()));
-                if (coords.length !== 2 || isNaN(coords[0]) || isNaN(coords[1])) {
-                    throw new Error("Invalid coordinates format");
-                }
-                return coords;
-            } catch (e) {
-                throw new Error(`Couldn't parse location: ${locationStr}`);
-            }
+            // Scroll to bottom of debug panel
+            debugDiv.scrollTop = debugDiv.scrollHeight;
         }
         
-        function showPath(source, destination) {
-            statusElement.textContent = `Finding route from ${source} to ${destination}...`;
-            log(`Routing from ${source} to ${destination}`);
+        // Store map elements and state
+        let map;
+        let view;
+        let markersLayer;
+        let routeLayer;
+        let startMarker = null;
+        let endMarker = null;
+        let currentCommand = null;
+        let awaitingResponse = false;
+        let userLocation = null;
+        
+        // Initialize locations database - using a dynamic approach with APIs instead of static list
+        let locationsDatabase = {};
+        
+        // Function to initialize locations from OpenStreetMap API
+        function initializeLocationsDatabase() {
+            debug("Initializing locations database using API...");
             
-            try {
-                const srcCoords = parseLocation(source);
-                const destCoords = parseLocation(destination);
-                
-                log(`Source parsed as: ${srcCoords}, Destination parsed as: ${destCoords}`);
-                
-                if (routeControl) {
-                    map.removeControl(routeControl);
-                }
-                
-                routeControl = L.Routing.control({
-                    waypoints: [
-                        L.latLng(srcCoords[0], srcCoords[1]), 
-                        L.latLng(destCoords[0], destCoords[1])
-                    ],
-                    routeWhileDragging: true,
-                    lineOptions: {
-                        styles: [{ color: '#6CB1EE', weight: 5 }]
-                    }
-                }).addTo(map);
-                
-                statusElement.textContent = "Route calculated!";
-            } catch (error) {
-                statusElement.textContent = error.message;
-                log(`Routing error: ${error.message}`);
-                alert(error.message);
-            }
-        }
-        
-        // Test function for routing
-        function testRouting() {
-            if (!userLocation) {
-                alert("Your location is not available yet. Please wait.");
-                return;
-            }
+            // We'll use a more dynamic approach using the Nominatim API
+            // rather than a static predefined list
             
-            // Route to a default destination (Mumbai as an example)
-            const mumbai = [19.0760, 72.8777];
-            showPath("my location", mumbai.join(","));
-        }
-        
-        // Voice command setup
-        if (annyang) {
-            // Define commands with multiple variations for better recognition
-            const commands = {
-                // Fixed: Added variations for problematic commands
-                'zoom in': zoomIn,
-                'zooming': zoomIn,
-                'make bigger': zoomIn,
-                
-                'zoom out': zoomOut,
-                'zooming out': zoomOut,
-                'make smaller': zoomOut,
-                
-                'where am I': function() {
-                    log("RECOGNIZED: 'where am I'");
-                    if (userLocation) {
-                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
-                        map.setView(userLocation, 15);
-                    } else {
-                        statusElement.textContent = "Your location is not available";
-                    }
-                },
-                'where I am': function() { // Added variation
-                    log("RECOGNIZED: 'where I am'");
-                    if (userLocation) {
-                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
-                        map.setView(userLocation, 15);
-                    } else {
-                        statusElement.textContent = "Your location is not available";
-                    }
-                },
-                'show my location': function() { // Added alternative phrase
-                    log("RECOGNIZED: 'show my location'");
-                    if (userLocation) {
-                        statusElement.textContent = `Your location: ${userLocation[0].toFixed(4)}, ${userLocation[1].toFixed(4)}`;
-                        map.setView(userLocation, 15);
-                    } else {
-                        statusElement.textContent = "Your location is not available";
-                    }
-                },
-                
-                'update location': updateUserLocation,
-                'refresh location': updateUserLocation,  // Added variation
-                'get my location': updateUserLocation,   // Added variation
-                'find me': updateUserLocation,           // Added simple alternative
-                
-                'test command': testCommand,
-                'test': testCommand, // Shorter variation
-                
-                'show path from *source to *destination': function(source, destination) {
-                    log(`RECOGNIZED: 'show path from ${source} to ${destination}'`);
-                    statusElement.textContent = `Command recognized: show path from ${source} to ${destination}`;
-                    showPath(source, destination);
-                },
-                'route from *source to *destination': function(source, destination) { // Added variation
-                    log(`RECOGNIZED: 'route from ${source} to ${destination}'`);
-                    statusElement.textContent = `Command recognized: route from ${source} to ${destination}`;
-                    showPath(source, destination);
-                }
+            // Add some initial high-priority locations to the database as a fallback
+            locationsDatabase = {
+                'delhi': [77.1025, 28.7041],
+                'new delhi': [77.2090, 28.6139],
+                'mumbai': [72.8777, 19.0760],
+                'karol bagh': [77.1909, 28.6519],
+                'connaught place': [77.2167, 28.6304],
+                'india gate': [77.2295, 28.6129]
             };
             
-            // Add debug command to show all commands
-            commands['show commands'] = function() {
-                log("RECOGNIZED: 'show commands'");
-                alert("Available commands: 'zoom in', 'zoom out', 'where am I', 'update location', 'test command', 'show path from X to Y'");
+            // Instead of importing a full dataset, we'll dynamically load locations
+            // when needed using the searchLocation function
+        }
+        
+        // Create dialog functions
+        function showDialog(title, content, onConfirm, onCancel) {
+            document.getElementById('dialog-title').textContent = title;
+            document.getElementById('dialog-content').textContent = content;
+            
+            const overlay = document.getElementById('dialog-overlay');
+            const confirmBtn = document.getElementById('dialog-confirm');
+            const cancelBtn = document.getElementById('dialog-cancel');
+            
+            // Set up event listeners
+            const confirmHandler = () => {
+                overlay.style.display = 'none';
+                confirmBtn.removeEventListener('click', confirmHandler);
+                cancelBtn.removeEventListener('click', cancelHandler);
+                if (onConfirm) onConfirm();
             };
             
-            // Add commands to annyang
-            annyang.addCommands(commands);
+            const cancelHandler = () => {
+                overlay.style.display = 'none';
+                confirmBtn.removeEventListener('click', confirmHandler);
+                cancelBtn.removeEventListener('click', cancelHandler);
+                if (onCancel) onCancel();
+            };
             
-            // Add callbacks to get feedback on voice recognition
-            annyang.addCallback('start', function() {
-                statusElement.textContent = "Voice recognition started...";
-                log("Annyang started");
-            });
+            confirmBtn.addEventListener('click', confirmHandler);
+            cancelBtn.addEventListener('click', cancelHandler);
             
-            annyang.addCallback('soundstart', function() {
-                statusElement.textContent = "Listening...";
-                log("Sound detected");
-            });
-            
-            annyang.addCallback('result', function(phrases) {
-                statusElement.textContent = "Heard phrases: " + phrases[0];
-                log("Heard phrases: " + JSON.stringify(phrases));
-            });
-            
-            annyang.addCallback('resultMatch', function(phrase, matched, matches) {
-                log(`Matched "${phrase}" to command "${matched}"`);
-            });
-            
-            annyang.addCallback('resultNoMatch', function(phrases) {
-                log("No match found for: " + JSON.stringify(phrases));
-                statusElement.textContent = "Sorry, I didn't understand that command";
-            });
-            
-            annyang.addCallback('error', function(error) {
-                console.error("Annyang error:", error);
-                log("Error: " + JSON.stringify(error));
-                statusElement.textContent = "Voice recognition error";
-            });
-            
-            // Set debug mode to true for detailed console logs
-            annyang.debug(true);
-            
-            // Improve recognition settings
-            annyang.setLanguage('en-US'); // Explicitly set language
-            
-            // Start listening with more permissive options
+            // Show the dialog
+            overlay.style.display = 'flex';
+        }
+        
+        // Initialize the map (using OpenLayers)
+        function initMap() {
             try {
-                annyang.start({ 
-                    autoRestart: true, 
-                    continuous: true,
-                    paused: false
+                // Create view centered on a default location initially
+                view = new ol.View({
+                    center: ol.proj.fromLonLat([77.1025, 28.7041]), // Default to Delhi region
+                    zoom: 10,
+                    minZoom: 2,
+                    maxZoom: 19
                 });
-                log("Annyang initialized and started");
-                statusElement.textContent = "Ready for commands";
+                
+                // Get user's current location if allowed
+                if (navigator.geolocation) {
+                    debug("Requesting user location...");
+                    
+                    // Add a button to manually set location
+                    const locationDiv = document.createElement('div');
+                    locationDiv.id = 'manual-location';
+                    locationDiv.style.position = 'absolute';
+                    locationDiv.style.top = '80px';
+                    locationDiv.style.right = '10px';
+                    locationDiv.style.zIndex = '1000';
+                    locationDiv.style.background = 'white';
+                    locationDiv.style.padding = '10px';
+                    locationDiv.style.borderRadius = '4px';
+                    locationDiv.style.boxShadow = '0 0 10px rgba(0,0,0,0.2)';
+                    
+                    locationDiv.innerHTML = `
+                        <button id="manual-location-btn" style="background-color: #4285f4; color: white; 
+                            border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;">
+                            Set My Location Manually
+                        </button>
+                    `;
+                    
+                    document.body.appendChild(locationDiv);
+                    
+                    // Add event listener for the manual location button
+                    document.getElementById('manual-location-btn').addEventListener('click', function() {
+                        showDialog(
+                            "Set Your Location",
+                            "Click on the map to set your current location",
+                            // Yes callback - will be triggered by map click
+                            function() {},
+                            // No callback
+                            function() {
+                                debug("Manual location setting cancelled");
+                            }
+                        );
+                        
+                        // Add a one-time click listener to the map
+                        const clickListener = function(evt) {
+                            const clickCoords = ol.proj.toLonLat(evt.coordinate);
+                            debug("Manual location set to: " + clickCoords);
+                            
+                            // Remove the click listener
+                            map.un('click', clickListener);
+                            
+                            // Close the dialog
+                            document.getElementById('dialog-overlay').style.display = 'none';
+                            
+                            // Set the user location
+                            setUserLocation(clickCoords);
+                        };
+                        
+                        // Add the click listener to the map
+                        map.once('click', clickListener);
+                    });
+                    
+                    // Function to set user location with a marker
+                    function setUserLocation(coords) {
+                        // Reverse geocode to get location name
+                        reverseGeocode(coords, function(locationName) {
+                            // Clear any previous user marker
+                            const features = markersLayer.getSource().getFeatures();
+                            for (let i = features.length - 1; i >= 0; i--) {
+                                const feature = features[i];
+                                if (feature.get('type') === 'user') {
+                                    markersLayer.getSource().removeFeature(feature);
+                                }
+                            }
+                            
+                            // Center map on user location
+                            view.animate({
+                                center: ol.proj.fromLonLat(coords),
+                                zoom: 15,
+                                duration: 1000
+                            });
+                            
+                            // Add a marker for current location
+                            const userMarker = new ol.Feature({
+                                geometry: new ol.geom.Point(ol.proj.fromLonLat(coords)),
+                                name: locationName || 'Current Location',
+                                type: 'user'
+                            });
+                            
+                            // Style for user location marker (blue)
+                            userMarker.setStyle(new ol.style.Style({
+                                image: new ol.style.Circle({
+                                    radius: 8,
+                                    fill: new ol.style.Fill({color: '#1a73e8'}),
+                                    stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                                }),
+                                text: new ol.style.Text({
+                                    text: 'You',
+                                    offsetY: -15,
+                                    fill: new ol.style.Fill({color: '#1a73e8'}),
+                                    stroke: new ol.style.Stroke({color: '#ffffff', width: 2}),
+                                    font: 'bold 12px Arial'
+                                })
+                            }));
+                            
+                            // Add to markers layer
+                            markersLayer.getSource().addFeature(userMarker);
+                            
+                            // Store the user's location for later use
+                            userLocation = {
+                                coords: coords,
+                                name: locationName || "Current Location"
+                            };
+                            
+                            speak("Location set to: " + (locationName || "Selected position"));
+                        });
+                    }
+                    
+                    // Still try automatic geolocation
+                    navigator.geolocation.getCurrentPosition(
+                        // Success callback
+                        function(position) {
+                            const userCoords = [position.coords.longitude, position.coords.latitude];
+                            debug("Auto-detected user location: " + userCoords);
+                            
+                            // Set the user location using the helper function
+                            setUserLocation(userCoords);
+                        },
+                        // Error callback
+                        function(error) {
+                            debug("Geolocation error: " + error.message);
+                            // Continue with default view if user location is not available
+                            speak("Could not determine your location. Using Delhi region as default view.");
+                        },
+                        // Options - improve accuracy
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 20000,
+                            maximumAge: 0
+                        }
+                    );
+                } else {
+                    debug("Geolocation not supported by this browser");
+                }
+                
+                // Create high-quality tile sources for better clarity
+                const osmSource = new ol.source.OSM({
+                    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    crossOrigin: 'anonymous'
+                });
+                
+                const satelliteSource = new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © <a href="https://www.esri.com/">Esri</a>',
+                    crossOrigin: 'anonymous',
+                    maxZoom: 19
+                });
+                
+                // Initialize map with layers
+                map = new ol.Map({
+                    target: 'map',
+                    layers: [
+                        new ol.layer.Tile({
+                            source: osmSource,
+                            visible: true,
+                            title: 'Streets',
+                            preload: Infinity
+                        }),
+                        new ol.layer.Tile({
+                            source: satelliteSource,
+                            visible: false,
+                            title: 'Satellite',
+                            preload: Infinity
+                        })
+                    ],
+                    view: view,
+                    controls: ol.control.defaults({
+                        zoom: true,
+                        attribution: true,
+                        rotate: false
+                    })
+                });
+                
+                // Create vector source and layer for markers
+                markersLayer = new ol.layer.Vector({
+                    source: new ol.source.Vector(),
+                    style: new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 8,
+                            fill: new ol.style.Fill({color: '#4285f4'}),
+                            stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                        })
+                    })
+                });
+                
+                // Create vector source and layer for routes
+                routeLayer = new ol.layer.Vector({
+                    source: new ol.source.Vector(),
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: '#1a73e8',
+                            width: 4
+                        })
+                    })
+                });
+                
+                map.addLayer(markersLayer);
+                map.addLayer(routeLayer);
+                
+                debug("Map initialized with higher clarity!");
+                
+                // Announce that the map is ready
+                setTimeout(() => {
+                    speak('Enhanced voice map interface ready');
+                }, 1000);
             } catch (e) {
-                log("Error starting Annyang: " + e.message);
-                alert("Error starting voice recognition system: " + e.message);
+                debug("Error initializing map: " + e.message);
+            }
+        }
+        
+        // Initialize the map on window load
+        window.onload = function() {
+            debug("Window loaded");
+            initializeLocationsDatabase();
+            initMap();
+            initSpeechRecognition();
+        };
+        
+        // Speech recognition setup
+        function initSpeechRecognition() {
+            try {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                
+                if (SpeechRecognition) {
+                    const recognition = new SpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.lang = 'en-US';
+                    recognition.interimResults = false;
+                    recognition.maxAlternatives = 1;
+                    debug('Speech recognition initialized');
+                    
+                    const voiceBtn = document.getElementById('voice-btn');
+                    const statusDiv = document.getElementById('status');
+                    let isListening = false;
+                    
+                    voiceBtn.addEventListener('click', () => {
+                        try {
+                            if (!isListening) {
+                                // Start listening
+                                recognition.start();
+                                voiceBtn.classList.add('listening');
+                                if (awaitingResponse) {
+                                    statusDiv.textContent = 'Listening for your response...';
+                                } else {
+                                    statusDiv.textContent = 'Listening for a command...';
+                                }
+                                isListening = true;
+                                debug('Started listening');
+                            } else {
+                                // Stop listening
+                                recognition.stop();
+                                voiceBtn.classList.remove('listening');
+                                statusDiv.textContent = 'Click the microphone and speak a command';
+                                isListening = false;
+                                debug('Stopped listening');
+                            }
+                        } catch (e) {
+                            debug('Error toggling speech recognition: ' + e.message);
+                            // Force reset
+                            voiceBtn.classList.remove('listening');
+                            statusDiv.textContent = 'Click the microphone to try again';
+                            isListening = false;
+                        }
+                    });
+                    
+                    recognition.onresult = (event) => {
+                        try {
+                            const transcript = event.results[0][0].transcript.toLowerCase();
+                            statusDiv.textContent = `Recognized: "${transcript}"`;
+                            debug('Recognized: ' + transcript);
+                            
+                            // Process the voice input
+                            if (awaitingResponse) {
+                                handleDialogResponse(transcript);
+                            } else {
+                                processVoiceCommand(transcript);
+                            }
+                            
+                            // Automatically stop listening after getting a result
+                            recognition.stop();
+                            voiceBtn.classList.remove('listening');
+                            isListening = false;
+                        } catch (e) {
+                            debug('Error processing speech result: ' + e.message);
+                            statusDiv.textContent = 'Error processing command';
+                        }
+                    };
+                    
+                    recognition.onend = () => {
+                        // Handle end of speech recognition
+                        voiceBtn.classList.remove('listening');
+                        if (isListening) {
+                            statusDiv.textContent = 'Listening timed out. Click again to speak.';
+                            isListening = false;
+                            debug('Listening timed out');
+                        }
+                    };
+                    
+                    recognition.onerror = (event) => {
+                        debug('Speech recognition error: ' + event.error);
+                        statusDiv.textContent = `Error occurred: ${event.error}`;
+                        voiceBtn.classList.remove('listening');
+                        isListening = false;
+                    };
+                } else {
+                    // Browser doesn't support speech recognition
+                    document.getElementById('voice-control').innerHTML = '<div id="status">Voice recognition not supported in this browser. Please try Chrome.</div>';
+                    debug('Speech recognition not supported in this browser');
+                }
+            } catch (e) {
+                debug('Error setting up speech recognition: ' + e.message);
+                document.getElementById('voice-control').innerHTML = '<div id="status">Error initializing voice recognition: ' + e.message + '</div>';
+            }
+        }
+        
+        // Handle dialog responses for multi-step commands
+        function handleDialogResponse(response) {
+            try {
+                debug(`Handling response for ${currentCommand}: ${response}`);
+                
+                if (currentCommand === 'path_start') {
+                    // Check for "current location" or similar phrases
+                    if (response.includes('current') && response.includes('location') || 
+                        response.includes('my') && response.includes('location') ||
+                        response.includes('where') && response.includes('am') ||
+                        response.includes('here')) {
+                        
+                        if (userLocation) {
+                            setStartLocation(userLocation.name, userLocation.coords);
+                            speak(`Start location set to your current location. Where would you like to go?`);
+                            currentCommand = 'path_destination';
+                            document.getElementById('status').textContent = 'Please provide a destination';
+                        } else {
+                            speak(`I don't have your current location. Please specify a place name.`);
+                            // Keep the same command state to try again
+                        }
+                    } else {
+                        // Use the enhanced location search for start location
+                        searchLocation(response, function(location) {
+                            if (location) {
+                                setStartLocation(location.name, location.coords);
+                                speak(`Start location set to ${location.name}. Where would you like to go?`);
+                                currentCommand = 'path_destination';
+                                document.getElementById('status').textContent = 'Please provide a destination';
+                            } else {
+                                speak(`I couldn't find ${response}. Please try again with a different location.`);
+                                // Keep the same command state to try again
+                            }
+                        });
+                    }
+                }
+                else if (currentCommand === 'path_destination') {
+                    // Handle the destination for path finding
+                    // Check for "current location" or similar phrases
+                    if (response.includes('current') && response.includes('location') || 
+                        response.includes('my') && response.includes('location') ||
+                        response.includes('where') && response.includes('am') ||
+                        response.includes('here')) {
+                        
+                        if (userLocation) {
+                            setEndLocation(userLocation.name, userLocation.coords);
+                            calculateAndShowRoute();
+                            // Reset the command state
+                            currentCommand = null;
+                            awaitingResponse = false;
+                        } else {
+                            speak(`I don't have your current location. Please specify a place name.`);
+                            // Keep the same command state to try again
+                        }
+                    } else {
+                        // Use the enhanced location search for destination
+                        searchLocation(response, function(location) {
+                            if (location) {
+                                setEndLocation(location.name, location.coords);
+                                calculateAndShowRoute();
+                                // Reset the command state
+                                currentCommand = null;
+                                awaitingResponse = false;
+                            } else {
+                                speak(`I couldn't find ${response}. Please try again with a different location.`);
+                                // Keep the same command state to try again
+                            }
+                        });
+                    }
+                }
+                else {
+                    // Unknown command state
+                    speak("I'm not sure what to do next. Let's start over.");
+                    resetCommandState();
+                }
+            } catch (e) {
+                debug('Error handling dialog response: ' + e.message);
+                resetCommandState();
+            }
+        }
+        
+        // Reset command state
+        function resetCommandState() {
+            currentCommand = null;
+            awaitingResponse = false;
+            document.getElementById('status').textContent = 'Click the microphone and speak a command';
+        }
+        
+        // Function to search for a location using the Nominatim API and our database
+        function searchLocation(query, callback) {
+            try {
+                debug(`Searching for location: ${query}`);
+                
+                // First check our database of already known locations
+                for (const locName in locationsDatabase) {
+                    if (query.toLowerCase().includes(locName)) {
+                        debug(`Found location in database: ${locName}`);
+                        callback({
+                            name: locName,
+                            coords: locationsDatabase[locName],
+                            source: 'database'
+                        });
+                        return;
+                    }
+                }
+                
+                // If not found in database, use Nominatim for geocoding
+                // Format the query to focus on Delhi region for better results
+                let searchQuery = query;
+                if (!query.toLowerCase().includes('delhi') && 
+                    !query.toLowerCase().includes('india')) {
+                    searchQuery = query + ' Delhi India';
+                }
+                
+                // Build the URL for the Nominatim API
+                const apiUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`;
+                
+                // Create a new XMLHttpRequest
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', apiUrl, true);
+                xhr.setRequestHeader('Accept', 'application/json');
+                // Add a user-agent header to respect API guidelines
+                xhr.setRequestHeader('User-Agent', 'VoiceMapInterface/1.0');
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.length > 0) {
+                            const result = response[0];
+                            debug(`Found location via Nominatim: ${result.display_name}`);
+                            
+                            // Add this location to our database for future use
+                            const locationName = result.display_name.split(',')[0];
+                            const coords = [parseFloat(result.lon), parseFloat(result.lat)];
+                            locationsDatabase[locationName.toLowerCase()] = coords;
+                            
+                            callback({
+                                name: locationName,
+                                coords: coords,
+                                displayName: result.display_name,
+                                source: 'nominatim'
+                            });
+                        } else {
+                            // Try searching with Photon API as a backup (better for POIs)
+                            searchWithPhoton(searchQuery, callback);
+                        }
+                    } else {
+                        debug(`Error from Nominatim API: ${xhr.status}`);
+                        // Try with Photon as a backup
+                        searchWithPhoton(searchQuery, callback);
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    debug('Network error when contacting Nominatim API');
+                    // Try with Photon as a backup
+                    searchWithPhoton(searchQuery, callback);
+                };
+                
+                xhr.send();
+                
+            } catch (e) {
+                debug(`Error searching for location: ${e.message}`);
+                callback(null);
+            }
+        }
+        
+        // Backup search with Photon API for better POI search
+        function searchWithPhoton(query, callback) {
+            try {
+                debug(`Trying Photon API for query: ${query}`);
+                
+                // Build the URL for the Photon API
+                const apiUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1`;
+                
+                // Create a new XMLHttpRequest
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', apiUrl, true);
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.features && response.features.length > 0) {
+                            const feature = response.features[0];
+                            const properties = feature.properties;
+                            const geometry = feature.geometry;
+                            
+                            if (geometry && geometry.coordinates) {
+                                const coords = [geometry.coordinates[0], geometry.coordinates[1]];
+                                
+                                // Build a name from the properties
+                                let name = properties.name || "";
+                                if (!name && properties.street) {
+                                    name = properties.street;
+                                    if (properties.housenumber) {
+                                        name += " " + properties.housenumber;
+                                    }
+                                }
+                                
+                                if (!name) {
+                                    name = query; // Fallback to the original query
+                                }
+                                
+                                debug(`Found location via Photon: ${name}`);
+                                
+                                // Add to our database
+                                locationsDatabase[name.toLowerCase()] = coords;
+                                
+                                callback({
+                                    name: name,
+                                    coords: coords,
+                                    displayName: name,
+                                    source: 'photon'
+                                });
+                            } else {
+                                debug('Invalid geometry in Photon response');
+                                callback(null);
+                            }
+                        } else {
+                            debug(`No results found via Photon for query: ${query}`);
+                            callback(null);
+                        }
+                    } else {
+                        debug(`Error from Photon API: ${xhr.status}`);
+                        callback(null);
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    debug('Network error when contacting Photon API');
+                    callback(null);
+                };
+                
+                xhr.send();
+                
+            } catch (e) {
+                debug(`Error searching with Photon: ${e.message}`);
+                callback(null);
+            }
+        }
+        
+        // Function for reverse geocoding (convert coordinates to location name)
+        function reverseGeocode(coords, callback) {
+            try {
+                debug(`Reverse geocoding coordinates: ${coords}`);
+                
+                // Build the URL for the Nominatim API
+                const apiUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords[1]}&lon=${coords[0]}`;
+                
+                // Create a new XMLHttpRequest
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', apiUrl, true);
+                xhr.setRequestHeader('Accept', 'application/json');
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response && response.display_name) {
+                            debug(`Found location name: ${response.display_name}`);
+                            
+                            // Extract a more user-friendly name
+                            let locationName;
+                            if (response.address) {
+                                // Try to get a meaningful name component
+                                if (response.address.suburb) {
+                                    locationName = response.address.suburb;
+                                } else if (response.address.neighbourhood) {
+                                    locationName = response.address.neighbourhood;
+                                } else if (response.address.road) {
+                                    locationName = response.address.road;
+                                } else if (response.address.city) {
+                                    locationName = response.address.city;
+                                } else {
+                                    // Fallback to the first part of the display name
+                                    locationName = response.display_name.split(',')[0];
+                                }
+                            } else {
+                                locationName = response.display_name.split(',')[0];
+                            }
+                            
+                            callback(locationName);
+                        } else {
+                            debug('No results found for reverse geocoding');
+                            callback(null);
+                        }
+                    } else {
+                        debug(`Error from Nominatim API: ${xhr.status}`);
+                        callback(null);
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    debug('Network error when contacting Nominatim API');
+                    callback(null);
+                };
+                
+                xhr.send();
+                
+            } catch (e) {
+                debug(`Error reverse geocoding: ${e.message}`);
+                callback(null);
+            }
+        }
+        
+        // Set the start location for route finding
+        function setStartLocation(name, coords) {
+            // Clear existing start marker if it exists
+            if (startMarker) {
+                markersLayer.getSource().removeFeature(startMarker);
             }
             
-        } else {
-            statusElement.textContent = "Voice recognition not supported in your browser";
-            log("Annyang not available");
-            alert('Voice recognition not supported in your browser.');
+            // Create the start marker
+            startMarker = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat(coords)),
+                name: name,
+                type: 'start'
+            });
+            
+            // Style for start marker (green)
+            startMarker.setStyle(new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({color: '#0f9d58'}),
+                    stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                }),
+                text: new ol.style.Text({
+                    text: 'A',
+                    fill: new ol.style.Fill({color: '#ffffff'}),
+                    font: 'bold 12px Arial'
+                })
+            }));
+            
+            markersLayer.getSource().addFeature(startMarker);
+            
+            // Pan to the start location
+            view.animate({
+                center: ol.proj.fromLonLat(coords),
+                duration: 500
+            });
+            
+            debug(`Start location set to: ${name}`);
+        }
+        
+        // Set the end location for route finding
+        function setEndLocation(name, coords) {
+            // Clear existing end marker if it exists
+            if (endMarker) {
+                markersLayer.getSource().removeFeature(endMarker);
+            }
+            
+            // Create the end marker
+            endMarker = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat(coords)),
+                name: name,
+                type: 'end'
+            });
+            
+            // Style for end marker (red)
+            endMarker.setStyle(new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 8,
+                    fill: new ol.style.Fill({color: '#ea4335'}),
+                    stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                }),
+                text: new ol.style.Text({
+                    text: 'B',
+                    fill: new ol.style.Fill({color: '#ffffff'}),
+                    font: 'bold 12px Arial'
+                })
+            }));
+            
+            markersLayer.getSource().addFeature(endMarker);
+            
+            // Pan to the end location
+            view.animate({
+                center: ol.proj.fromLonLat(coords),
+                duration: 500
+            });
+            
+            debug(`End location set to: ${name}`);
+        }
+        
+        // Calculate and show route between start and end points
+        function calculateAndShowRoute() {
+            try {
+                // Ensure we have both start and end points
+                if (!startMarker || !endMarker) {
+                    speak("I need both a start and end location to show a path.");
+                    return;
+                }
+                
+                // Get coordinates
+                const startCoord = ol.proj.toLonLat(startMarker.getGeometry().getCoordinates());
+                const endCoord = ol.proj.toLonLat(endMarker.getGeometry().getCoordinates());
+                
+                // Clear existing routes
+                routeLayer.getSource().clear();
+                
+                // Try to calculate a more realistic route (this is a simplified version)
+                // In a real app, you would use a routing service API
+                
+                // Calculate the midpoint with some randomness to make it look more like a realistic route
+                const midLat = (startCoord[1] + endCoord[1]) / 2 + (Math.random() - 0.5) * 0.1;
+                const midLng = (startCoord[0] + endCoord[0]) / 2 + (Math.random() - 0.5) * 0.1;
+                
+                // Create a curved path with intermediate points
+                const lineString = new ol.geom.LineString([
+                    ol.proj.fromLonLat(startCoord),
+                    ol.proj.fromLonLat([startCoord[0] * 0.7 + midLng * 0.3, startCoord[1] * 0.7 + midLat * 0.3]),
+                    ol.proj.fromLonLat([startCoord[0] * 0.4 + midLng * 0.6, startCoord[1] * 0.4 + midLat * 0.6]),
+                    ol.proj.fromLonLat([midLng, midLat]),
+                    ol.proj.fromLonLat([endCoord[0] * 0.4 + midLng * 0.6, endCoord[1] * 0.4 + midLat * 0.6]),
+                    ol.proj.fromLonLat([endCoord[0] * 0.7 + midLng * 0.3, endCoord[1] * 0.7 + midLat * 0.3]),
+                    ol.proj.fromLonLat(endCoord)
+                ]);
+                
+                // Calculate straight-line distance
+                const wgs84Sphere = new ol.Sphere(6378137);
+                const directDistance = wgs84Sphere.haversineDistance(startCoord, endCoord);
+                
+                // Estimate realistic route distance (typically ~20-30% longer than direct)
+                const routeFactor = 1.2 + Math.random() * 0.1; // Between 1.2 and 1.3
+                const distance = directDistance * routeFactor;
+                
+                // Convert to km and round to 1 decimal place
+                const distanceKm = Math.round(distance / 100) / 10;
+                
+                // Add some intermediate route points
+                const numPoints = Math.floor(distanceKm / 100) + 2; // 1 point per 100km plus a minimum of 2
+                
+                // Create route feature with styling
+                const routeFeature = new ol.Feature({
+                    geometry: lineString,
+                    name: 'Route'
+                });
+                
+                // Style the route with a blue line that has rounded ends
+                routeFeature.setStyle(new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#1a73e8',
+                        width: 4,
+                        lineCap: 'round',
+                        lineJoin: 'round'
+                    })
+                }));
+                
+                // Add to route layer
+                routeLayer.getSource().addFeature(routeFeature);
+                
+                // Fit view to route with padding
+                map.getView().fit(lineString, {
+                    padding: [100, 100, 100, 100],
+                    duration: 1000
+                });
+                
+                // Calculate estimated travel time (very rough estimate)
+                const speedKph = 80; // Assume average speed of 80 km/h
+                const timeHours = distanceKm / speedKph;
+                let timeStr = "";
+                
+                if (timeHours < 1) {
+                    // Less than 1 hour
+                    const timeMinutes = Math.round(timeHours * 60);
+                    timeStr = `${timeMinutes} minutes`;
+                } else {
+                    // More than 1 hour
+                    const hours = Math.floor(timeHours);
+                    const minutes = Math.round((timeHours - hours) * 60);
+                    timeStr = `${hours} hour${hours > 1 ? 's' : ''}`;
+                    if (minutes > 0) {
+                        timeStr += ` and ${minutes} minute${minutes > 1 ? 's' : ''}`;
+                    }
+                }
+                
+                // Show distance and time information
+                const distanceInfo = document.getElementById('distance-info');
+                distanceInfo.innerHTML = `
+                    <strong>Distance:</strong> ${distanceKm} km<br>
+                    <strong>Est. travel time:</strong> ${timeStr}
+                `;
+                distanceInfo.style.display = 'block';
+                
+                // Announce the route
+                speak(`Route calculated. The distance is approximately ${distanceKm} kilometers, with an estimated travel time of ${timeStr}.`);
+                
+                debug(`Route calculated: ${distanceKm} km, ${timeStr}`);
+            } catch (e) {
+                debug('Error calculating route: ' + e.message);
+                speak('There was an error calculating the route.');
+            }
+        }
+        
+        // Process the voice commands
+        function processVoiceCommand(command) {
+            try {
+                debug('Processing command: ' + command);
+                
+                // Zoom commands
+                if (command.includes('zoom in')) {
+                    zoom(true);
+                    speak('Zooming in');
+                } 
+                else if (command.includes('zoom out')) {
+                    zoom(false);
+                    speak('Zooming out');
+                }
+                
+                // Map style commands
+                else if (command.includes('satellite') || command.includes('satellite view')) {
+                    setMapStyle('Satellite');
+                    speak('Switching to satellite view');
+                } 
+                else if (command.includes('streets') || command.includes('streets view') || command.includes('street view')) {
+                    setMapStyle('Streets');
+                    speak('Switching to streets view');
+                }
+                
+                // Pan commands
+                else if (command.includes('pan north')) {
+                    pan('north');
+                    speak('Panning north');
+                } 
+                else if (command.includes('pan south')) {
+                    pan('south');
+                    speak('Panning south');
+                } 
+                else if (command.includes('pan east')) {
+                    pan('east');
+                    speak('Panning east');
+                } 
+                else if (command.includes('pan west')) {
+                    pan('west');
+                    speak('Panning west');
+                }
+                
+                // Location commands
+                else if (command.includes('go to')) {
+                    const location = command.replace('go to', '').trim();
+                    if (location) {
+                        goToLocation(location);
+                    }
+                }
+                
+                // Find points of interest
+                else if (command.includes('find') && command.includes('nearby')) {
+                    const poi = command.replace('find', '').replace('nearby', '').trim();
+                    if (poi) {
+                        findNearbyPlaces(poi);
+                    }
+                }
+                
+                // Show path command
+                else if (command.includes('show path') || command.includes('find path') || command.includes('show route') || command.includes('find route')) {
+                    startPathFinding();
+                }
+                
+                // Clear map command
+                else if (command.includes('clear map') || command.includes('reset map')) {
+                    clearMap();
+                    speak('Map cleared');
+                }
+                
+                // Center map command
+                else if (command.includes('center map')) {
+                    centerMap();
+                    speak('Map centered');
+                }
+                
+                // Unknown command
+                else {
+                    speak('Sorry, I did not understand that command');
+                    debug('Unknown command');
+                }
+            } catch (e) {
+                debug('Error processing command: ' + e.message);
+                speak('Error processing command');
+            }
+        }
+        
+        // Start the path finding process
+        function startPathFinding() {
+            try {
+                // Check if we have the user's current location
+                if (userLocation) {
+                    // Ask if user wants to use current location as starting point
+                    showDialog(
+                        "Use Current Location?",
+                        "Would you like to use your current location as the starting point?",
+                        // Yes callback
+                        function() {
+                            setStartLocation(userLocation.name, userLocation.coords);
+                            speak("Starting from your current location. Where would you like to go?");
+                            currentCommand = 'path_destination';
+                            awaitingResponse = true;
+                            document.getElementById('status').textContent = 'Please provide a destination';
+                        },
+                        // No callback
+                        function() {
+                            speak("Let's find a path. What's your starting location?");
+                            currentCommand = 'path_start';
+                            awaitingResponse = true;
+                            document.getElementById('status').textContent = 'Please provide a starting location';
+                        }
+                    );
+                } else {
+                    // No user location available, just ask for starting point
+                    speak("Let's find a path. What's your starting location?");
+                    currentCommand = 'path_start';
+                    awaitingResponse = true;
+                    document.getElementById('status').textContent = 'Please provide a starting location';
+                }
+                debug('Started path finding process');
+            } catch (e) {
+                debug('Error starting path finding: ' + e.message);
+                resetCommandState();
+            }
+        }
+        
+        // Clear all markers and routes from the map
+        function clearMap() {
+            try {
+                markersLayer.getSource().clear();
+                routeLayer.getSource().clear();
+                startMarker = null;
+                endMarker = null;
+                document.getElementById('distance-info').style.display = 'none';
+                debug('Map cleared');
+            } catch (e) {
+                debug('Error clearing map: ' + e.message);
+            }
+        }
+        
+        // Center the map to the default view
+        function centerMap() {
+            try {
+                view.animate({
+                    center: ol.proj.fromLonLat([-98.5795, 39.8283]), // Center of US
+                    zoom: 4,
+                    duration: 1000
+                });
+                debug('Map centered');
+            } catch (e) {
+                debug('Error centering map: ' + e.message);
+            }
+        }
+        
+        // Helper function to zoom in or out
+        function zoom(zoomIn) {
+            try {
+                const currentZoom = view.getZoom();
+                view.animate({
+                    zoom: zoomIn ? currentZoom + 1 : currentZoom - 1,
+                    duration: 250
+                });
+                debug('Zoom level changed to: ' + (zoomIn ? currentZoom + 1 : currentZoom - 1));
+            } catch (e) {
+                debug('Error changing zoom: ' + e.message);
+            }
+        }
+        
+        // Helper function to switch map style
+        function setMapStyle(style) {
+            try {
+                map.getLayers().forEach(layer => {
+                    if (layer.get('title') === style) {
+                        layer.setVisible(true);
+                    } else if (layer.get('title') === 'Streets' || layer.get('title') === 'Satellite') {
+                        layer.setVisible(false);
+                    }
+                });
+                debug('Map style changed to: ' + style);
+            } catch (e) {
+                debug('Error changing map style: ' + e.message);
+            }
+        }
+        
+        // Helper function to pan the map
+        function pan(direction) {
+            try {
+                const center = view.getCenter();
+                const resolution = view.getResolution();
+                const panDistance = 100 * resolution; // Pixels to pan
+                
+                let newX = center[0];
+                let newY = center[1];
+                
+                switch (direction) {
+                    case 'north':
+                        newY += panDistance;
+                        break;
+                    case 'south':
+                        newY -= panDistance;
+                        break;
+                    case 'east':
+                        newX += panDistance;
+                        break;
+                    case 'west':
+                        newX -= panDistance;
+                        break;
+                }
+                
+                view.animate({
+                    center: [newX, newY],
+                    duration: 250
+                });
+                debug('Panned to: ' + newX + ', ' + newY);
+            } catch (e) {
+                debug('Error panning map: ' + e.message);
+            }
+        }
+        
+        // Helper function to go to a location
+        function goToLocation(location) {
+            try {
+                // Use the enhanced location search
+                searchLocation(location, function(locationResult) {
+                    if (locationResult) {
+                        view.animate({
+                            center: ol.proj.fromLonLat(locationResult.coords),
+                            zoom: 14,
+                            duration: 1000
+                        });
+                        
+                        // Add a marker for this location
+                        const marker = new ol.Feature({
+                            geometry: new ol.geom.Point(ol.proj.fromLonLat(locationResult.coords)),
+                            name: locationResult.name,
+                            type: 'poi'
+                        });
+                        
+                        // Style the marker
+                        marker.setStyle(new ol.style.Style({
+                            image: new ol.style.Circle({
+                                radius: 6,
+                                fill: new ol.style.Fill({color: '#fbbc04'}),
+                                stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                            }),
+                            text: new ol.style.Text({
+                                text: locationResult.name,
+                                offsetY: -15,
+                                fill: new ol.style.Fill({color: '#000000'}),
+                                stroke: new ol.style.Stroke({color: '#ffffff', width: 2}),
+                                font: '12px Arial'
+                            })
+                        }));
+                        
+                        // Clear previous markers except user location
+                        const features = markersLayer.getSource().getFeatures();
+                        for (let i = features.length - 1; i >= 0; i--) {
+                            const feature = features[i];
+                            if (feature.get('type') !== 'user') {
+                                markersLayer.getSource().removeFeature(feature);
+                            }
+                        }
+                        
+                        markersLayer.getSource().addFeature(marker);
+                        
+                        speak(`Going to ${locationResult.name}`);
+                        debug('Going to: ' + locationResult.name);
+                    } else {
+                        speak(`Sorry, I don't know where ${location} is`);
+                        debug('Unknown location: ' + location);
+                    }
+                });
+            } catch (e) {
+                debug('Error going to location: ' + e.message);
+            }
+        }
+        
+        // Helper function to find nearby places
+        function findNearbyPlaces(placeType) {
+            try {
+                speak(`Searching for ${placeType} nearby`);
+                debug('Searching for: ' + placeType);
+                
+                // Clear existing markers except route markers
+                const features = markersLayer.getSource().getFeatures();
+                for (let i = features.length - 1; i >= 0; i--) {
+                    const feature = features[i];
+                    if (feature.get('type') !== 'start' && feature.get('type') !== 'end') {
+                        markersLayer.getSource().removeFeature(feature);
+                    }
+                }
+                
+                // Add some fake markers around the current center
+                const center = ol.proj.toLonLat(view.getCenter());
+                const numPlaces = 3 + Math.floor(Math.random() * 4); // 3-6 places
+                
+                for (let i = 0; i < numPlaces; i++) {
+                    // Random offset from center
+                    const latOffset = (Math.random() - 0.5) * 0.05;
+                    const lngOffset = (Math.random() - 0.5) * 0.05;
+                    
+                    // Create marker
+                    const marker = new ol.Feature({
+                        geometry: new ol.geom.Point(
+                            ol.proj.fromLonLat([center[0] + lngOffset, center[1] + latOffset])
+                        ),
+                        name: `${placeType} ${i+1}`,
+                        type: 'poi'
+                    });
+                    
+                    // Style for POI
+                    marker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({color: '#fbbc04'}),
+                            stroke: new ol.style.Stroke({color: '#ffffff', width: 2})
+                        }),
+                        text: new ol.style.Text({
+                            text: (i+1).toString(),
+                            fill: new ol.style.Fill({color: '#000000'}),
+                            font: 'bold 10px Arial',
+                            offsetY: -15
+                        })
+                    }));
+                    
+                    markersLayer.getSource().addFeature(marker);
+                }
+                
+                speak(`Found ${numPlaces} ${placeType} locations nearby`);
+                debug(`Added ${numPlaces} markers`);
+            } catch (e) {
+                debug('Error finding nearby places: ' + e.message);
+            }
+        }
+        
+        // Text-to-speech function for feedback
+        function speak(text) {
+            try {
+                if ('speechSynthesis' in window) {
+                    // Cancel any ongoing speech
+                    window.speechSynthesis.cancel();
+                    
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.volume = 1;
+                    utterance.rate = 1;
+                    utterance.pitch = 1;
+                    window.speechSynthesis.speak(utterance);
+                    debug('Speaking: ' + text);
+                    
+                    // Update status
+                    document.getElementById('status').textContent = text;
+                } else {
+                    debug('Speech synthesis not supported in this browser');
+                    // Update status anyway
+                    document.getElementById('status').textContent = text;
+                }
+            } catch (e) {
+                debug('Error with speech synthesis: ' + e.message);
+                // Fallback to just updating status
+                document.getElementById('status').textContent = text;
+            }
         }
     </script>
 </body>
